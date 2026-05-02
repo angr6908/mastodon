@@ -1,37 +1,30 @@
 #!/bin/sh
 set -eu
-
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
-
 pg_uid="$(id -u postgres)"
 mkdir -p "$PGDATA"
 pg_owner="$(stat -c '%u' "$PGDATA" 2>/dev/null || true)"
 if [ "$pg_owner" != "$pg_uid" ]; then
   chown -R postgres:postgres "$PGDATA"
 fi
-
 mkdir -p "$DB_HOST"
 chown postgres:postgres "$DB_HOST"
 chmod 3775 "$DB_HOST"
-
 system_owner="$(stat -c '%u' /opt/mastodon/public/system 2>/dev/null || true)"
 if [ "$system_owner" != "$(id -u mastodon)" ]; then
   chown -R mastodon:mastodon /opt/mastodon/public/system
 fi
-
 redis_uid="$(id -u redis)"
 mkdir -p "$REDIS_DATA"
 redis_owner="$(stat -c '%u' "$REDIS_DATA" 2>/dev/null || true)"
 if [ "$redis_owner" != "$redis_uid" ]; then
   chown -R redis:redis "$REDIS_DATA"
 fi
-
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   su-exec postgres initdb -D "$PGDATA" --encoding=UTF8 --locale=C
 fi
-
 su-exec postgres postgres \
   -D "$PGDATA" \
   -k "$DB_HOST" \
@@ -54,11 +47,9 @@ su-exec postgres postgres \
   -c max_wal_size=256MB \
   -c idle_in_transaction_session_timeout=30000 &
 postgres_pid="$!"
-
 until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT"; do
   sleep 1
 done
-
 su-exec postgres psql -v ON_ERROR_STOP=1 \
   -h "$DB_HOST" \
   -p "$DB_PORT" \
@@ -72,7 +63,6 @@ WHERE :'app_pass' <> '' \gexec
 SELECT format('CREATE DATABASE %I OWNER %I TEMPLATE template0 ENCODING %L', :'app_db', :'app_user', 'UTF8')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'app_db') \gexec
 SQL
-
 su-exec redis redis-server \
   --bind "$REDIS_HOST" \
   --port "$REDIS_PORT" \
@@ -85,31 +75,26 @@ su-exec redis redis-server \
   --lazyfree-lazy-server-del yes \
   --loglevel warning &
 redis_pid="$!"
-
 until redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping >/dev/null 2>&1; do
   sleep 1
 done
-
 cd /opt/mastodon
-
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec puma -C config/puma.rb &
 web_pid="$!"
-
 su-exec mastodon env PORT=4000 node ./streaming/index.js &
 streaming_pid="$!"
-
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec sidekiq &
 sidekiq_pid="$!"
-
+caddy run --config /etc/caddy/Caddyfile &
+caddy_pid="$!"
 shutdown() {
   trap - TERM INT
-  kill "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
-  wait "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+  kill "$caddy_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+  wait "$caddy_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
 }
 trap shutdown TERM INT
-
 while :; do
-  for pid in "$postgres_pid" "$redis_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid"; do
+  for pid in "$postgres_pid" "$redis_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$caddy_pid"; do
     if ! kill -0 "$pid" 2>/dev/null; then
       shutdown
       exit 1
