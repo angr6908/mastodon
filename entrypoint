@@ -1,0 +1,101 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
+pg_uid="$(id -u postgres)"
+mkdir -p "$PGDATA"
+pg_owner="$(stat -c '%u' "$PGDATA" 2>/dev/null || true)"
+if [ "$pg_owner" != "$pg_uid" ]; then
+  chown -R postgres:postgres "$PGDATA"
+fi
+
+mkdir -p "$DB_HOST"
+chown postgres:postgres "$DB_HOST"
+chmod 3775 "$DB_HOST"
+
+system_owner="$(stat -c '%u' /opt/mastodon/public/system 2>/dev/null || true)"
+if [ "$system_owner" != "$(id -u mastodon)" ]; then
+  chown -R mastodon:mastodon /opt/mastodon/public/system
+fi
+
+redis_uid="$(id -u redis)"
+mkdir -p "$REDIS_DATA"
+redis_owner="$(stat -c '%u' "$REDIS_DATA" 2>/dev/null || true)"
+if [ "$redis_owner" != "$redis_uid" ]; then
+  chown -R redis:redis "$REDIS_DATA"
+fi
+
+if [ ! -s "$PGDATA/PG_VERSION" ]; then
+  su-exec postgres initdb -D "$PGDATA" --encoding=UTF8 --locale=C
+fi
+
+su-exec postgres postgres \
+  -D "$PGDATA" \
+  -k "$DB_HOST" \
+  -p "$DB_PORT" \
+  -c listen_addresses=127.0.0.1 \
+  -c shared_buffers="$POSTGRES_SHARED_BUFFERS" \
+  -c effective_cache_size="$POSTGRES_EFFECTIVE_CACHE_SIZE" \
+  -c maintenance_work_mem="$POSTGRES_MAINTENANCE_WORK_MEM" \
+  -c work_mem="$POSTGRES_WORK_MEM" \
+  -c max_connections="$POSTGRES_MAX_CONNECTIONS" &
+postgres_pid="$!"
+
+until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT"; do
+  sleep 1
+done
+
+su-exec postgres psql -v ON_ERROR_STOP=1 \
+  -h "$DB_HOST" \
+  -p "$DB_PORT" \
+  --set=app_user="$DB_USER" \
+  --set=app_pass="$DB_PASS" \
+  --set=app_db="$DB_NAME" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN', :'app_user')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user') \gexec
+SELECT format('ALTER ROLE %I WITH PASSWORD %L', :'app_user', :'app_pass')
+WHERE :'app_pass' <> '' \gexec
+SELECT format('CREATE DATABASE %I OWNER %I TEMPLATE template0 ENCODING %L', :'app_db', :'app_user', 'UTF8')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'app_db') \gexec
+SQL
+
+su-exec redis redis-server \
+  --bind "$REDIS_HOST" \
+  --port "$REDIS_PORT" \
+  --dir "$REDIS_DATA" \
+  --maxmemory "$REDIS_MAXMEMORY" \
+  --maxmemory-policy noeviction &
+redis_pid="$!"
+
+until redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping >/dev/null 2>&1; do
+  sleep 1
+done
+
+cd /opt/mastodon
+su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec puma -C config/puma.rb &
+web_pid="$!"
+su-exec mastodon env PORT=4000 node ./streaming/index.js &
+streaming_pid="$!"
+su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec sidekiq &
+sidekiq_pid="$!"
+
+shutdown() {
+  trap - TERM INT
+  kill "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+  wait "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+}
+
+trap shutdown TERM INT
+
+while :; do
+  for pid in "$postgres_pid" "$redis_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      shutdown
+      exit 1
+    fi
+  done
+  sleep 5
+done
