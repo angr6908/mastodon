@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 
-# If arguments are provided, exec them directly (e.g. tootctl, rails console).
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
