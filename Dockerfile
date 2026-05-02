@@ -193,6 +193,7 @@ ENV RAILS_ENV=production \
 
 RUN apk add --no-cache \
   ca-certificates \
+  caddy \
   ffmpeg \
   file \
   hiredis \
@@ -233,7 +234,7 @@ RUN mkdir -p /opt/mastodon/public/system /opt/mastodon/tmp; \
   chown -R mastodon:mastodon /opt/mastodon/public/system /opt/mastodon/tmp
 
 VOLUME ["/mastodon/public/system", "/var/lib/postgresql/data", "/var/lib/redis"]
-EXPOSE 3000 4000
+EXPOSE 80 443
 ENTRYPOINT ["/usr/bin/env", \
   "-u", "DATABASE_URL", \
   "-u", "REDIS_URL", \
