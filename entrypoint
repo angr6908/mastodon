@@ -41,7 +41,22 @@ su-exec postgres postgres \
   -c effective_cache_size="$POSTGRES_EFFECTIVE_CACHE_SIZE" \
   -c maintenance_work_mem="$POSTGRES_MAINTENANCE_WORK_MEM" \
   -c work_mem="$POSTGRES_WORK_MEM" \
-  -c max_connections="$POSTGRES_MAX_CONNECTIONS" &
+  -c temp_buffers="$POSTGRES_TEMP_BUFFERS" \
+  -c wal_buffers="$POSTGRES_WAL_BUFFERS" \
+  -c max_connections="$POSTGRES_MAX_CONNECTIONS" \
+  -c autovacuum_max_workers="$POSTGRES_AUTOVACUUM_MAX_WORKERS" \
+  -c autovacuum_worker_slots="$POSTGRES_AUTOVACUUM_WORKER_SLOTS" \
+  -c max_worker_processes="$POSTGRES_MAX_WORKER_PROCESSES" \
+  -c max_parallel_workers="$POSTGRES_MAX_PARALLEL_WORKERS" \
+  -c max_parallel_workers_per_gather="$POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER" \
+  -c max_parallel_maintenance_workers="$POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS" \
+  -c max_wal_senders="$POSTGRES_MAX_WAL_SENDERS" \
+  -c max_replication_slots="$POSTGRES_MAX_REPLICATION_SLOTS" \
+  -c io_method="$POSTGRES_IO_METHOD" \
+  -c effective_io_concurrency="$POSTGRES_EFFECTIVE_IO_CONCURRENCY" \
+  -c maintenance_io_concurrency="$POSTGRES_MAINTENANCE_IO_CONCURRENCY" \
+  -c jit="$POSTGRES_JIT" \
+  -c track_activity_query_size="$POSTGRES_TRACK_ACTIVITY_QUERY_SIZE" &
 postgres_pid="$!"
 
 until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT"; do
