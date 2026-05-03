@@ -1,34 +1,33 @@
 #!/bin/sh
 set -eu
+
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
+
 pg_uid="$(id -u postgres)"
 mkdir -p "$PGDATA"
 pg_owner="$(stat -c '%u' "$PGDATA" 2>/dev/null || true)"
-if [ "$pg_owner" != "$pg_uid" ]; then
-  chown -R postgres:postgres "$PGDATA"
-fi
+[ "$pg_owner" = "$pg_uid" ] || chown -R postgres:postgres "$PGDATA"
+
 mkdir -p "$DB_HOST"
 chown postgres:postgres "$DB_HOST"
 chmod 3775 "$DB_HOST"
+
+mastodon_uid="$(id -u mastodon)"
 system_owner="$(stat -c '%u' /opt/mastodon/public/system 2>/dev/null || true)"
-if [ "$system_owner" != "$(id -u mastodon)" ]; then
-  chown -R mastodon:mastodon /opt/mastodon/public/system
-fi
+[ "$system_owner" = "$mastodon_uid" ] || chown -R mastodon:mastodon /opt/mastodon/public/system
+
 redis_uid="$(id -u redis)"
 mkdir -p "$REDIS_DATA"
 redis_owner="$(stat -c '%u' "$REDIS_DATA" 2>/dev/null || true)"
-if [ "$redis_owner" != "$redis_uid" ]; then
-  chown -R redis:redis "$REDIS_DATA"
-fi
-if [ ! -s "$PGDATA/PG_VERSION" ]; then
+[ "$redis_owner" = "$redis_uid" ] || chown -R redis:redis "$REDIS_DATA"
+
+[ -s "$PGDATA/PG_VERSION" ] || \
   su-exec postgres initdb -D "$PGDATA" --encoding=UTF8 --locale=C
-fi
+
 su-exec postgres postgres \
-  -D "$PGDATA" \
-  -k "$DB_HOST" \
-  -p "$DB_PORT" \
+  -D "$PGDATA" -k "$DB_HOST" -p "$DB_PORT" \
   -c listen_addresses=127.0.0.1 \
   -c shared_buffers="$POSTGRES_SHARED_BUFFERS" \
   -c effective_cache_size="$POSTGRES_EFFECTIVE_CACHE_SIZE" \
@@ -45,27 +44,30 @@ su-exec postgres postgres \
   -c bgwriter_lru_maxpages=10 \
   -c checkpoint_completion_target=0.9 \
   -c max_wal_size=256MB \
-  -c idle_in_transaction_session_timeout=30000 &
+  -c idle_in_transaction_session_timeout=30000 \
+  -c random_page_cost=1.1 &
 postgres_pid="$!"
-until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT"; do
-  sleep 1
+
+until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT" -t 1 2>/dev/null; do
+  sleep 0.2
 done
+
 su-exec postgres psql -v ON_ERROR_STOP=1 \
-  -h "$DB_HOST" \
-  -p "$DB_PORT" \
+  -h "$DB_HOST" -p "$DB_PORT" \
   --set=app_user="$DB_USER" \
   --set=app_pass="$DB_PASS" \
   --set=app_db="$DB_NAME" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN', :'app_user')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user') \gexec
+  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user') \gexec
 SELECT format('ALTER ROLE %I WITH PASSWORD %L', :'app_user', :'app_pass')
-WHERE :'app_pass' <> '' \gexec
-SELECT format('CREATE DATABASE %I OWNER %I TEMPLATE template0 ENCODING %L', :'app_db', :'app_user', 'UTF8')
-WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'app_db') \gexec
+  WHERE :'app_pass' <> '' \gexec
+SELECT format('CREATE DATABASE %I OWNER %I TEMPLATE template0 ENCODING %L',
+              :'app_db', :'app_user', 'UTF8')
+  WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'app_db') \gexec
 SQL
+
 su-exec redis redis-server \
-  --bind "$REDIS_HOST" \
-  --port "$REDIS_PORT" \
+  --bind "$REDIS_HOST" --port "$REDIS_PORT" \
   --dir "$REDIS_DATA" \
   --maxmemory "$REDIS_MAXMEMORY" \
   --maxmemory-policy noeviction \
@@ -75,30 +77,47 @@ su-exec redis redis-server \
   --lazyfree-lazy-server-del yes \
   --loglevel warning &
 redis_pid="$!"
+
 until redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping >/dev/null 2>&1; do
-  sleep 1
+  sleep 0.2
 done
+
 cd /opt/mastodon
-su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec puma -C config/puma.rb &
+
+su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
+  bundle exec rails db:migrate
+
+su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
+  bundle exec puma -C config/puma.rb &
 web_pid="$!"
-su-exec mastodon env PORT=4000 node ./streaming/index.js &
+
+until curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; do
+  sleep 0.5
+done
+
+su-exec mastodon env PORT=4000 \
+  node ./streaming/index.js &
 streaming_pid="$!"
-su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" bundle exec sidekiq &
+
+sleep 4
+su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
+  bundle exec sidekiq &
 sidekiq_pid="$!"
+
+sleep 2
 caddy run --config /etc/caddy/Caddyfile &
 caddy_pid="$!"
+
 shutdown() {
   trap - TERM INT
-  kill "$caddy_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
-  wait "$caddy_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+  kill "$caddy_pid" "$sidekiq_pid" "$streaming_pid" "$web_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
+  wait "$caddy_pid" "$sidekiq_pid" "$streaming_pid" "$web_pid" "$redis_pid" "$postgres_pid" 2>/dev/null || true
 }
 trap shutdown TERM INT
+
 while :; do
   for pid in "$postgres_pid" "$redis_pid" "$web_pid" "$streaming_pid" "$sidekiq_pid" "$caddy_pid"; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      shutdown
-      exit 1
-    fi
+    kill -0 "$pid" 2>/dev/null || { shutdown; exit 1; }
   done
   sleep 5
 done
