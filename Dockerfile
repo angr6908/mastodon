@@ -178,18 +178,18 @@ ENV RAILS_ENV=production \
   GEM_PATH=/usr/local/bundle \
   PATH=/opt/mastodon/bin:/usr/local/bundle/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   RUBY_JEMALLOC=/usr/lib/libjemalloc.so.2 \
-  MALLOC_CONF=narenas:1,background_thread:true,thp:never,dirty_decay_ms:500,muzzy_decay_ms:0 \
-  RUBY_GC_HEAP_INIT_SLOTS=2000 \
+  MALLOC_CONF=narenas:1,background_thread:true,thp:never,dirty_decay_ms:100,muzzy_decay_ms:0,retain:false \
+  RUBY_GC_HEAP_INIT_SLOTS=1500 \
   RUBY_GC_HEAP_FREE_SLOTS=200 \
-  RUBY_GC_HEAP_GROWTH_FACTOR=1.03 \
-  RUBY_GC_HEAP_GROWTH_MAX_SLOTS=1000 \
+  RUBY_GC_HEAP_GROWTH_FACTOR=1.02 \
+  RUBY_GC_HEAP_GROWTH_MAX_SLOTS=500 \
   RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR=1.0 \
-  RUBY_GC_MALLOC_LIMIT=262144 \
-  RUBY_GC_MALLOC_LIMIT_MAX=1048576 \
-  RUBY_GC_MALLOC_LIMIT_GROWTH_FACTOR=1.03 \
-  RUBY_GC_OLDMALLOC_LIMIT=524288 \
-  RUBY_GC_OLDMALLOC_LIMIT_MAX=2097152 \
-  RUBY_GC_OLDMALLOC_LIMIT_GROWTH_FACTOR=1.03
+  RUBY_GC_MALLOC_LIMIT=131072 \
+  RUBY_GC_MALLOC_LIMIT_MAX=524288 \
+  RUBY_GC_MALLOC_LIMIT_GROWTH_FACTOR=1.02 \
+  RUBY_GC_OLDMALLOC_LIMIT=131072 \
+  RUBY_GC_OLDMALLOC_LIMIT_MAX=524288 \
+  RUBY_GC_OLDMALLOC_LIMIT_GROWTH_FACTOR=1.02
 
 RUN apk add --no-cache \
   ca-certificates \
