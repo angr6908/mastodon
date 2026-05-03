@@ -91,7 +91,7 @@ su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
   bundle exec puma -C config/puma.rb &
 web_pid="$!"
 
-until curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; do
+until wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1; do
   sleep 0.5
 done
 
