@@ -5,7 +5,7 @@ Minimal Mastodon All-in-One Docker Image
 ```
 services:
   mastodon:
-    image: docker.io/unmol637/mastodon:latest
+    image: unmol637/mastodon:latest
     restart: always
     container_name: mastodon
     network_mode: host
