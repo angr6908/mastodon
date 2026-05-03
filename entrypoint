@@ -44,10 +44,7 @@ su-exec postgres postgres \
   -c checkpoint_completion_target=0.9 \
   -c max_wal_size=256MB \
   -c idle_in_transaction_session_timeout=30000 \
-  -c random_page_cost=1.1 \
-  -c max_worker_processes=2 \
-  -c max_parallel_workers=0 \
-  -c max_parallel_workers_per_gather=0 &
+  -c random_page_cost=1.1 &
 postgres_pid="$!"
 
 until su-exec postgres pg_isready -q -h "$DB_HOST" -p "$DB_PORT" -t 1 2>/dev/null; do
