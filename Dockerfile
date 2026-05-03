@@ -154,7 +154,7 @@ ENV RAILS_ENV=production \
   SIDEKIQ_CONCURRENCY=1 \
   STREAMING_CLUSTER_NUM=1 \
   RUBY_YJIT_ENABLE=0 \
-  NODE_OPTIONS=--max-old-space-size=24 \
+  NODE_OPTIONS=--max-old-space-size=96 \
   REDIS_HOST=127.0.0.1 \
   REDIS_PORT=6379 \
   REDIS_DATA=/var/lib/redis \
