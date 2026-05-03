@@ -1,4 +1,5 @@
-# mastodon-lite
+# docker-mastodon
+
 Minimal Mastodon All-in-One Docker Image
 
 ### compose.yml
