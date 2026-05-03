@@ -71,7 +71,9 @@ su-exec redis redis-server \
   --dir "$REDIS_DATA" \
   --maxmemory "$REDIS_MAXMEMORY" \
   --maxmemory-policy noeviction \
-  --save "" \
+  --appendonly yes \
+  --appendfilename appendonly.aof \
+  --appendfsync everysec \
   --lazyfree-lazy-eviction yes \
   --lazyfree-lazy-expire yes \
   --lazyfree-lazy-server-del yes \
