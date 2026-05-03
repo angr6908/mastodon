@@ -30,7 +30,7 @@ example.com {
         reverse_proxy 127.0.0.1:4000
     }
 
-    @static path /assets/* /packs/* /emoji/* /sounds/* /ocr/* /system/* /avatars/* /headers/*
+    @static path /sw.js /assets/* /packs/* /emoji/* /sounds/* /ocr/* /system/* /avatars/* /headers/*
     handle @static {
         file_server {
             precompressed
