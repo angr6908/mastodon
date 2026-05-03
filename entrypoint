@@ -87,7 +87,7 @@ done
 cd /opt/mastodon
 
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
-  bundle exec rails db:migrate 2>&1 | grep -v "already up"
+  bundle exec rails db:migrate
 
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
   bundle exec puma -C config/puma.rb &
