@@ -87,7 +87,7 @@ done
 cd /opt/mastodon
 
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
-  bundle exec rails db:migrate
+  bundle exec rails db:migrate 2>&1 | grep -v "already up"
 
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
   bundle exec puma -C config/puma.rb &
@@ -97,16 +97,21 @@ until wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1; do
   sleep 0.5
 done
 
+sleep 10
+
 su-exec mastodon env PORT=4000 \
   node ./streaming/index.js &
 streaming_pid="$!"
 
-sleep 4
+until wget -qO- http://127.0.0.1:4000/api/v1/streaming/health >/dev/null 2>&1; do
+   sleep 0.5
+done
+
 su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
   bundle exec sidekiq &
 sidekiq_pid="$!"
 
-sleep 2
+sleep 8
 caddy run --config /etc/caddy/Caddyfile &
 caddy_pid="$!"
 
