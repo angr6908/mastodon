@@ -1,27 +1,16 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -gt 0 ]; then
-  exec "$@"
-fi
+[ "$#" -eq 0 ] || exec "$@"
 
-pg_uid="$(id -u postgres)"
-mkdir -p "$PGDATA"
-pg_owner="$(stat -c '%u' "$PGDATA" 2>/dev/null || true)"
-[ "$pg_owner" = "$pg_uid" ] || chown -R postgres:postgres "$PGDATA"
+own() { [ "$(stat -c '%u' "$1" 2>/dev/null)" = "$(id -u "$2")" ] || chown -R "$2:$2" "$1"; }
+mdo() { su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" "$@"; }
+wait_url() { until wget -qO- "$1" >/dev/null 2>&1; do sleep 0.5; done; }
 
-mkdir -p "$DB_HOST"
-chown postgres:postgres "$DB_HOST"
-chmod 3775 "$DB_HOST"
-
-mastodon_uid="$(id -u mastodon)"
-system_owner="$(stat -c '%u' /opt/mastodon/public/system 2>/dev/null || true)"
-[ "$system_owner" = "$mastodon_uid" ] || chown -R mastodon:mastodon /opt/mastodon/public/system
-
-redis_uid="$(id -u redis)"
-mkdir -p "$REDIS_DATA"
-redis_owner="$(stat -c '%u' "$REDIS_DATA" 2>/dev/null || true)"
-[ "$redis_owner" = "$redis_uid" ] || chown -R redis:redis "$REDIS_DATA"
+mkdir -p "$PGDATA";     own "$PGDATA" postgres
+mkdir -p "$DB_HOST";    chown postgres:postgres "$DB_HOST"; chmod 3775 "$DB_HOST"
+                        own /opt/mastodon/public/system mastodon
+mkdir -p "$REDIS_DATA"; own "$REDIS_DATA" redis
 
 [ -s "$PGDATA/PG_VERSION" ] || \
   su-exec postgres initdb -D "$PGDATA" --encoding=UTF8 --locale=C
@@ -85,32 +74,19 @@ done
 
 cd /opt/mastodon
 
-su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
-  bundle exec rails db:migrate
+mdo bundle exec rails db:migrate
 
-su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
-  bundle exec puma -C config/puma.rb &
+mdo bundle exec puma -C config/puma.rb &
 web_pid="$!"
+wait_url http://127.0.0.1:3000/health
 
-until wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1; do
-  sleep 0.5
-done
-
-sleep 10
-
-su-exec mastodon env PORT=4000 \
-  node ./streaming/index.js &
+su-exec mastodon env PORT=4000 node ./streaming/index.js &
 streaming_pid="$!"
+wait_url http://127.0.0.1:4000/api/v1/streaming/health
 
-until wget -qO- http://127.0.0.1:4000/api/v1/streaming/health >/dev/null 2>&1; do
-   sleep 0.5
-done
-
-su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" \
-  bundle exec sidekiq &
+mdo bundle exec sidekiq &
 sidekiq_pid="$!"
 
-sleep 8
 caddy run --config /etc/caddy/Caddyfile &
 caddy_pid="$!"
 
