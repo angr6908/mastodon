@@ -4,12 +4,11 @@ set -eu
 [ "$#" -eq 0 ] || exec "$@"
 
 own() { [ "$(stat -c '%u' "$1" 2>/dev/null)" = "$(id -u "$2")" ] || chown -R "$2:$2" "$1"; }
-mdo() { su-exec mastodon env LD_PRELOAD="$RUBY_JEMALLOC" "$@"; }
+mdo() { env LD_PRELOAD="$RUBY_JEMALLOC" "$@"; }
 wait_url() { until wget -qO- "$1" >/dev/null 2>&1; do sleep 0.5; done; }
 
 mkdir -p "$PGDATA";     own "$PGDATA" postgres
 mkdir -p "$DB_HOST";    chown postgres:postgres "$DB_HOST"; chmod 3775 "$DB_HOST"
-                        own /opt/mastodon/public/system mastodon
 mkdir -p "$REDIS_DATA"; own "$REDIS_DATA" redis
 
 [ -s "$PGDATA/PG_VERSION" ] || \
@@ -80,7 +79,7 @@ mdo bundle exec puma -C config/puma.rb &
 web_pid="$!"
 wait_url http://127.0.0.1:3000/health
 
-su-exec mastodon env PORT=4000 node ./streaming/index.js &
+PORT=4000 node ./streaming/index.js &
 streaming_pid="$!"
 wait_url http://127.0.0.1:4000/api/v1/streaming/health
 
