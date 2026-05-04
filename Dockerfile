@@ -135,35 +135,31 @@ RUN apk add --no-cache \
   tzdata \
   vips \
   yaml; \
-  addgroup -g 991 -S mastodon; \
-  adduser -S -D -H -h /opt/mastodon -u 991 -G mastodon mastodon; \
-  ln -s /opt/mastodon /mastodon; \
   mkdir -p /opt/mastodon/public/system /opt/mastodon/tmp /opt/mastodon/log \
     /run/postgresql /var/lib/postgresql/data /var/log/postgresql /var/lib/redis; \
   chown -R redis:redis /var/lib/redis; \
   chown -R postgres:postgres /run/postgresql /var/lib/postgresql /var/log/postgresql; \
-  chown mastodon:mastodon /opt/mastodon/public/system /opt/mastodon/tmp /opt/mastodon/log; \
   chmod 3775 /run/postgresql; \
   rm -rf /var/cache/apk/* /usr/share/man /usr/share/doc /usr/share/ri /tmp/*
 
 WORKDIR /opt/mastodon
-COPY --from=build /usr/local/bundle/ /usr/local/bundle/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/app/          /opt/mastodon/app/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/bin/          /opt/mastodon/bin/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/config/       /opt/mastodon/config/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/db/           /opt/mastodon/db/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/lib/          /opt/mastodon/lib/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/public/       /opt/mastodon/public/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/streaming/    /opt/mastodon/streaming/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/vendor/       /opt/mastodon/vendor/
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon/node_modules/ /opt/mastodon/node_modules/
-COPY --chown=mastodon:mastodon --from=build \
+COPY --from=build /usr/local/bundle/     /usr/local/bundle/
+COPY --from=build /opt/mastodon/app/          /opt/mastodon/app/
+COPY --from=build /opt/mastodon/bin/          /opt/mastodon/bin/
+COPY --from=build /opt/mastodon/config/       /opt/mastodon/config/
+COPY --from=build /opt/mastodon/db/           /opt/mastodon/db/
+COPY --from=build /opt/mastodon/lib/          /opt/mastodon/lib/
+COPY --from=build /opt/mastodon/public/       /opt/mastodon/public/
+COPY --from=build /opt/mastodon/streaming/    /opt/mastodon/streaming/
+COPY --from=build /opt/mastodon/vendor/       /opt/mastodon/vendor/
+COPY --from=build /opt/mastodon/node_modules/ /opt/mastodon/node_modules/
+COPY --from=build \
   /opt/mastodon/Gemfile /opt/mastodon/Gemfile.lock /opt/mastodon/package.json \
   /opt/mastodon/Rakefile /opt/mastodon/config.ru \
   /opt/mastodon/
 COPY --chmod=755 entrypoint /entrypoint
 
-VOLUME ["/mastodon/public/system", "/var/lib/postgresql/data", "/var/lib/redis"]
+VOLUME ["/opt/mastodon/public/system", "/var/lib/postgresql/data", "/var/lib/redis"]
 EXPOSE 80 443
 ENTRYPOINT ["/usr/bin/env", \
   "-u", "DATABASE_URL", \
