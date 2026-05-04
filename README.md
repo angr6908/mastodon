@@ -13,7 +13,7 @@ services:
     env_file: .env.production
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./data:/mastodon/public/system
+      - ./data:/opt/mastodon/public/system
       - ./pgdata:/var/lib/postgresql/data
       - ./redis:/var/lib/redis
 ```
