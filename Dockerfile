@@ -159,6 +159,7 @@ COPY --chown=mastodon:mastodon --from=build /opt/mastodon/vendor/       /opt/mas
 COPY --chown=mastodon:mastodon --from=build /opt/mastodon/node_modules/ /opt/mastodon/node_modules/
 COPY --chown=mastodon:mastodon --from=build \
   /opt/mastodon/Gemfile /opt/mastodon/Gemfile.lock /opt/mastodon/package.json \
+  /opt/mastodon/Rakefile /opt/mastodon/config.ru \
   /opt/mastodon/
 COPY --chmod=755 entrypoint /entrypoint
 
