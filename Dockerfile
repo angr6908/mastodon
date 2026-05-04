@@ -1,14 +1,5 @@
-FROM alpine:latest AS source
-ARG MASTODON_VERSION
-
-RUN apk add --no-cache ca-certificates curl tar
-WORKDIR /src
-RUN set -eux; \
-  test -n "$MASTODON_VERSION"; \
-  curl -fsSL "https://github.com/mastodon/mastodon/archive/refs/tags/v${MASTODON_VERSION}.tar.gz" \
-  | tar -xz --strip-components=1
-
 FROM alpine:latest AS build
+ARG MASTODON_VERSION
 
 ENV RAILS_ENV=production \
   NODE_ENV=production \
@@ -16,7 +7,6 @@ ENV RAILS_ENV=production \
   BUNDLE_WITHOUT=development:test \
   BUNDLE_PATH=/usr/local/bundle \
   GEM_HOME=/usr/local/bundle \
-  GEM_PATH=/usr/local/bundle \
   PATH=/usr/local/bundle/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN apk add --no-cache \
@@ -46,15 +36,16 @@ RUN apk add --no-cache \
   zlib-dev
 
 WORKDIR /opt/mastodon
-COPY --from=source /src/ ./
+RUN set -eux; \
+  test -n "$MASTODON_VERSION"; \
+  curl -fsSL "https://github.com/mastodon/mastodon/archive/refs/tags/v${MASTODON_VERSION}.tar.gz" \
+  | tar -xz --strip-components=1
 
 RUN set -eux; \
-  bundler_version="$(sed -n '/^BUNDLED WITH$/{n;s/^[[:space:]]*//;p;q;}' Gemfile.lock)"; \
-  gem install --no-document bundler -v "$bundler_version"; \
-  bundle "_${bundler_version}_" config set frozen true; \
-  bundle "_${bundler_version}_" config set without "development test"; \
-  bundle "_${bundler_version}_" config set build.nokogiri "--use-system-libraries"; \
-  bundle "_${bundler_version}_" install -j"$(nproc)"; \
+  bv="$(sed -n '/^BUNDLED WITH$/{n;s/^[[:space:]]*//;p;q;}' Gemfile.lock)"; \
+  gem install --no-document bundler -v "$bv"; \
+  bundle "_${bv}_" config set build.nokogiri "--use-system-libraries"; \
+  bundle "_${bv}_" install -j"$(nproc)"; \
   rm -rf /usr/local/bundle/cache /root/.bundle/cache
 
 RUN set -eux; \
@@ -66,65 +57,7 @@ RUN set -eux; \
   SECRET_KEY_BASE_DUMMY=1 bundle exec rails assets:precompile; \
   yarn workspaces focus --production @mastodon/streaming; \
   yarn cache clean; \
-  rm -rf /root/.cache /tmp/* /opt/mastodon/tmp/cache
-
-RUN set -eux; \
-  rm -rf \
-    .annotaterb.yml \
-    .browserslistrc \
-    .buildpacks \
-    .devcontainer \
-    .editorconfig \
-    .env.development \
-    .env.production.sample \
-    .env.test \
-    .env.vagrant \
-    .foreman \
-    .gitattributes \
-    .github \
-    .gitignore \
-    .haml-lint.yml \
-    .nvmrc \
-    .oxfmtrc.json \
-    .rspec \
-    .rubocop \
-    .rubocop.yml \
-    .rubocop_todo.yml \
-    .ruby-gemset \
-    .slugignore \
-    .storybook \
-    .watchmanconfig \
-    Aptfile \
-    AUTHORS.md \
-    CHANGELOG.md \
-    CODE_OF_CONDUCT.md \
-    CONTRIBUTING.md \
-    Dockerfile \
-    FEDERATION.md \
-    Procfile \
-    Procfile.dev \
-    README.md \
-    SECURITY.md \
-    Vagrantfile \
-    app.json \
-    chart \
-    crowdin.yml \
-    dist \
-    docker-compose.yml \
-    eslint.config.mjs \
-    docs \
-    jsconfig.json \
-    lint-staged.config.js \
-    priv-config \
-    publiccode.yml \
-    scalingo.json \
-    spec \
-    stylelint.config.js \
-    storybook-static \
-    tsconfig.json \
-    vitest.config.mts \
-    vitest.shims.d.ts \
-    public/packs-test; \
+  rm -rf /root/.cache /tmp/* tmp/cache public/packs-test; \
   [ ! -d app/javascript ] || find app/javascript -type d \( -name __tests__ -o -name __mocks__ -o -name __snapshots__ \) -prune -exec rm -rf {} +; \
   [ ! -d app/javascript ] || find app/javascript -type f \( -name "*.stories.*" -o -name "*.test.*" -o -name "*-test.*" -o -name "*.spec.*" \) -delete; \
   find /usr/local/bundle -type f \( -name "*.o" -o -name "*.gem" \) -delete; \
@@ -174,7 +107,6 @@ ENV RAILS_ENV=production \
   BUNDLE_WITHOUT=development:test \
   BUNDLE_PATH=/usr/local/bundle \
   GEM_HOME=/usr/local/bundle \
-  GEM_PATH=/usr/local/bundle \
   PATH=/opt/mastodon/bin:/usr/local/bundle/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   RUBY_JEMALLOC=/usr/lib/libjemalloc.so.2 \
   MALLOC_CONF=narenas:1,background_thread:true,thp:never,dirty_decay_ms:100,muzzy_decay_ms:0,retain:false
@@ -206,20 +138,29 @@ RUN apk add --no-cache \
   addgroup -g 991 -S mastodon; \
   adduser -S -D -H -h /opt/mastodon -u 991 -G mastodon mastodon; \
   ln -s /opt/mastodon /mastodon; \
-  mkdir -p /opt/mastodon /run/postgresql /var/lib/postgresql/data /var/log/postgresql /var/lib/redis; \
-  chown -R mastodon:mastodon /opt/mastodon; \
+  mkdir -p /opt/mastodon/public/system /opt/mastodon/tmp /opt/mastodon/log \
+    /run/postgresql /var/lib/postgresql/data /var/log/postgresql /var/lib/redis; \
   chown -R redis:redis /var/lib/redis; \
   chown -R postgres:postgres /run/postgresql /var/lib/postgresql /var/log/postgresql; \
+  chown mastodon:mastodon /opt/mastodon/public/system /opt/mastodon/tmp /opt/mastodon/log; \
   chmod 3775 /run/postgresql; \
   rm -rf /var/cache/apk/* /usr/share/man /usr/share/doc /usr/share/ri /tmp/*
 
 WORKDIR /opt/mastodon
 COPY --from=build /usr/local/bundle/ /usr/local/bundle/
-COPY --from=build /opt/mastodon/ /opt/mastodon/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/app/          /opt/mastodon/app/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/bin/          /opt/mastodon/bin/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/config/       /opt/mastodon/config/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/db/           /opt/mastodon/db/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/lib/          /opt/mastodon/lib/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/public/       /opt/mastodon/public/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/streaming/    /opt/mastodon/streaming/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/vendor/       /opt/mastodon/vendor/
+COPY --chown=mastodon:mastodon --from=build /opt/mastodon/node_modules/ /opt/mastodon/node_modules/
+COPY --chown=mastodon:mastodon --from=build \
+  /opt/mastodon/Gemfile /opt/mastodon/Gemfile.lock /opt/mastodon/package.json \
+  /opt/mastodon/
 COPY --chmod=755 entrypoint /entrypoint
-
-RUN mkdir -p /opt/mastodon/public/system /opt/mastodon/tmp; \
-  chown -R mastodon:mastodon /opt/mastodon/public/system /opt/mastodon/tmp
 
 VOLUME ["/mastodon/public/system", "/var/lib/postgresql/data", "/var/lib/redis"]
 EXPOSE 80 443
