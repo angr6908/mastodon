@@ -90,14 +90,13 @@ ENV RAILS_ENV=production \
   NODE_OPTIONS=--max-old-space-size=48 \
   REDIS_HOST=127.0.0.1 \
   REDIS_PORT=6379 \
-  REDIS_DATA=/var/lib/redis \
+  REDIS_DATA=/data \
   DB_HOST=/run/postgresql \
   DB_PORT=5432 \
   DB_USER=postgres \
   DB_NAME=mastodon_production \
   DB_PASS= \
   PGDATA=/var/lib/postgresql/data \
-  REDIS_MAXMEMORY=24mb \
   POSTGRES_SHARED_BUFFERS=16MB \
   POSTGRES_MAINTENANCE_WORK_MEM=8MB \
   POSTGRES_WORK_MEM=1MB \
@@ -136,8 +135,8 @@ RUN apk add --no-cache \
   vips \
   yaml; \
   mkdir -p /opt/mastodon/public/system /opt/mastodon/tmp /opt/mastodon/log \
-    /run/postgresql /var/lib/postgresql/data /var/log/postgresql /var/lib/redis; \
-  chown -R redis:redis /var/lib/redis; \
+    /run/postgresql /var/lib/postgresql/data /var/log/postgresql /data; \
+  chown -R redis:redis /data; \
   chown -R postgres:postgres /run/postgresql /var/lib/postgresql /var/log/postgresql; \
   chmod 3775 /run/postgresql; \
   rm -rf /var/cache/apk/* /usr/share/man /usr/share/doc /usr/share/ri /tmp/*
@@ -159,7 +158,7 @@ COPY --from=build \
   /opt/mastodon/
 COPY --chmod=755 entrypoint /entrypoint
 
-VOLUME ["/opt/mastodon/public/system", "/var/lib/postgresql/data", "/var/lib/redis"]
+VOLUME ["/opt/mastodon/public/system", "/var/lib/postgresql/data", "/data"]
 EXPOSE 80 443
 ENTRYPOINT ["/usr/bin/env", \
   "-u", "DATABASE_URL", \
