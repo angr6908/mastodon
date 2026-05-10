@@ -15,7 +15,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./data:/opt/mastodon/public/system
       - ./pgdata:/var/lib/postgresql/data
-      - ./redis:/var/lib/redis
+      - ./redis:/data
 ```
 
 ### Caddyfile
